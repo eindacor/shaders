@@ -4,28 +4,20 @@
 #define SAMPLE_INCREMENTS 4
 #define MAX_HATCH_LINES 6
 
-uniform float u_GlobalHatchRotation;
-uniform float u_SampleDistance;
-uniform float u_HatchAngleIncrement;
-uniform float u_HatchDistance;
-uniform float u_HatchLineThickness;
-uniform float u_AdjustBrightness;
-uniform float u_HatchLines;
+uniform float u_GlobalHatchRotation = 0.15f;
+uniform float u_SampleDistance = 0.1f;
+uniform float u_HatchAngleIncrement = 0.6f;
+uniform float u_HatchDistance = 0.2f;
+uniform float u_HatchLineThickness = 0.03f;
+uniform float u_AdjustBrightness = 0.1f;
+uniform float u_HatchLines = .75f;
 
-uniform float u_ClearColorR;
-uniform float u_ClearColorG;
-uniform float u_ClearColorB;
-uniform float u_LineColorR;
-uniform float u_LineColorG;
-uniform float u_LineColorB;
-
-float normalizeInputVal(float value) {
-    return (value + 1000.f) / 2000.f;
-}
+uniform float4 u_ClearColor = { 1.f, 1.f, 1.f, 1.f };
+uniform float4 u_LineColor = { 0.f, 0.f, 0.f, 1.f};
 
 int getHatchCount(float brightness) {
-    float hatchSampleIncrement = 1.f / max(1.f, normalizeInputVal(u_HatchLines) * float(MAX_HATCH_LINES));
-    return int((1.f - brightness * normalizeInputVal(u_AdjustBrightness)) / hatchSampleIncrement);
+    float hatchSampleIncrement = 1.f / max(1.f, u_HatchLines * float(MAX_HATCH_LINES));
+    return int((1.f - brightness * u_AdjustBrightness) / hatchSampleIncrement);
 }
 
 float getBrightness(float3 color) {
@@ -100,11 +92,11 @@ float getHatchValue(float2 uv, float rotation, AspectRatioMatrices aspectRatioMa
     );
 
     float adjustedUV = mul(uv, mul(aspectRatioMatrices.scaleMatrix, rotationMatrix));
-    float hatchDist = pow(normalizeInputVal(u_HatchDistance), 3.f);
+    float hatchDist = pow(u_HatchDistance, 3.f);
 
     float closestLineX = round(adjustedUV.x / hatchDist) * hatchDist;
 
-    float lineThickness = pow(normalizeInputVal(u_HatchLineThickness), 2.f);
+    float lineThickness = pow(u_HatchLineThickness, 2.f);
     float leftLineEdge = closestLineX - lineThickness / 2.f;
     float rightLineEdge = closestLineX + lineThickness / 2.f;
 
@@ -123,26 +115,17 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float2 aspectUV = mul(uv, aspectRatioMatrices.scaleMatrix);
 
-    float sampleSize = pow(normalizeInputVal(u_SampleDistance), 3.f);
+    float sampleSize = pow(u_SampleDistance, 3.f);
     SampleData sampleData = getSampleData(uv, aspectRatioMatrices, sampleSize);
 
     int hatchCount = getHatchCount(getBrightness(sampleData.color.rgb));
 
-    float4 outColor = float4(
-        normalizeInputVal(u_ClearColorR), 
-        normalizeInputVal(u_ClearColorG), 
-        normalizeInputVal(u_ClearColorB), 
-        1.f);
-    float4 hatchColor = float4(
-        normalizeInputVal(u_LineColorR), 
-        normalizeInputVal(u_LineColorG), 
-        normalizeInputVal(u_LineColorB), 
-        1.f);
-    float hatchAngleIncrement = normalizeInputVal(u_HatchAngleIncrement) * TWOPI;
+    float4 outColor = u_ClearColor;
+    float hatchAngleIncrement = u_HatchAngleIncrement * TWOPI;
     for (int i=0; i<hatchCount; i++) {
-        float hatchRotation = float(i + 1) * hatchAngleIncrement * normalizeInputVal(u_GlobalHatchRotation);
+        float hatchRotation = float(i + 1) * hatchAngleIncrement * u_GlobalHatchRotation;
         float hatchValue = getHatchValue(uv, hatchRotation, aspectRatioMatrices);
-        outColor = lerp(outColor, hatchColor, hatchValue);
+        outColor = lerp(outColor, u_LineColor, hatchValue);
     }
     
     return outColor;

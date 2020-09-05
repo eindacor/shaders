@@ -1,23 +1,18 @@
 
-uniform float u_RotationSpeed; // {"material":"Rotation Speed","default":1,"range":[0,1]}
-uniform float u_ColorChangeSpeed; // {"material":"Color Change Speed","default":1,"range":[0,1]}
-uniform float u_ZoomSpeed; // {"material":"Zoom Speed","default":1,"range":[0,1]}
-uniform float u_InversionFactor; // {"material":"Inversion Factor","default":0,"range":[0,1]}
-uniform float u_RChannel; // {"material":"R Channel","default":1,"range":[0,1]}
-uniform float u_GChannel; // {"material":"G Channel","default":1,"range":[0,1]}
-uniform float u_BChannel; // {"material":"B Channel","default":1,"range":[0,1]}
+uniform float u_RotationSpeed = 1.f; // {"material":"Rotation Speed","default":1,"range":[0,1]}
+uniform float u_ColorChangeSpeed = 1.f; // {"material":"Color Change Speed","default":1,"range":[0,1]}
+uniform float u_ZoomSpeed = 1.f; // {"material":"Zoom Speed","default":1,"range":[0,1]}
+uniform float u_InversionFactor = 0.f; // {"material":"Inversion Factor","default":0,"range":[0,1]}
+uniform float u_RChannel = 1.f; // {"material":"R Channel","default":1,"range":[0,1]}
+uniform float u_GChannel = 1.f; // {"material":"G Channel","default":1,"range":[0,1]}
+uniform float u_BChannel = 1.f; // {"material":"B Channel","default":1,"range":[0,1]}
 
 #define antiAlias 2
-
-float normalizeInputVal(float value) {
-    return (value + 1000.f) / 2000.f;
-}
-
 
 float getMagnification(float currentTime) 
 {
     float totalZoomTime = 21.f;
-    float timeScale = normalizeInputVal(u_ZoomSpeed) * .5f;
+    float timeScale = u_ZoomSpeed * .5f;
     float adjustedTime = currentTime * timeScale;
   
     float zoomTime = fmod(adjustedTime, totalZoomTime);
@@ -30,7 +25,7 @@ float getMagnification(float currentTime)
 
 float2 getRotatedPosition(float currentTime, float2 graphPosition) 
 {
-    float rotationSpeed = normalizeInputVal(u_RotationSpeed) * .1f;
+    float rotationSpeed = u_RotationSpeed * .1f;
     float viewRotationTime = currentTime * rotationSpeed;
     float2x2 viewRotationMatrix = float2x2(
         cos(viewRotationTime), -sin(viewRotationTime),
@@ -75,7 +70,7 @@ float3 getColor(float value) {
 float3 rotateColor(float3 color, float time) {
     float3 deNormalized = (color * 2.f) - float3(1.f, 1.f, 1.f);
     
-    float timeFactor = time * normalizeInputVal(u_ColorChangeSpeed);
+    float timeFactor = time * u_ColorChangeSpeed;
 
     float xRotationTime = timeFactor / 2.1f;
     float yRotationTime = timeFactor / 2.3f;
@@ -139,7 +134,7 @@ float4 mainImage( VertData v_in ) : TARGET
     
     float4 outColor = getAAPosColor(screenResolution, iterationLimit, v_in.uv, aspectRatio, focalPoint, elapsed_time);
 
-    outColor = float4(outColor * float4(normalizeInputVal(u_RChannel), normalizeInputVal(u_GChannel), normalizeInputVal(u_BChannel), 1.f));
-    float3 invertedColor = lerp(outColor.rgb, float3(1.f, 1.f, 1.f) - outColor.rgb, normalizeInputVal(u_InversionFactor));
+    outColor = float4(outColor * float4(u_RChannel, u_GChannel, u_BChannel, 1.f));
+    float3 invertedColor = lerp(outColor.rgb, float3(1.f, 1.f, 1.f) - outColor.rgb, u_InversionFactor);
     return float4(invertedColor, outColor.a);
 }

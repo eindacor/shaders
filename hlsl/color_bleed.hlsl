@@ -4,14 +4,10 @@ uniform float u_BChannel;
 
 #define searchDistance 24
 
-float normalizeInputVal(float value) {
-    return (value + 1000.f) / 2000.f;
-}
-
 float4 mainImage( VertData v_in ) : TARGET
 {
     float pixelHeight = 1.f / uv_size.y;
-    float3 targetColor = float3(normalizeInputVal(u_RChannel), normalizeInputVal(u_GChannel), normalizeInputVal(u_BChannel));
+    float3 targetColor = float3(u_RChannel, u_GChannel, u_BChannel);
 
     for (int i=0; i<searchDistance; i++) {
         float yOffset = pixelHeight * float(searchDistance) - float(i) * pixelHeight;

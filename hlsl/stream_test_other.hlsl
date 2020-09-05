@@ -1,7 +1,6 @@
 
 #define AA .003f
 #define TWOPI 6.28318530718f
-// #define GREEN float3(51.f / 255.f, 138.f / 255.f, 36.f / 255.f)
 #define iResolution float2(800.f, 540.f)
 #define OTHER true
 

@@ -21,25 +21,23 @@
 #define AA .001f
 #define ALMOST_ZERO .00001f
 
-uniform float u_SampleSize;
-uniform float u_DotCoverage;
+uniform float u_SampleSize = 0.08f;
+uniform float u_DotCoverage = 1.f;
 
-uniform float u_RotationC;
-uniform float u_RotationM;
-uniform float u_RotationY;
-uniform float u_RotationK;
+uniform float u_RotationC = 0.1f;
+uniform float u_RotationM = 0.3f;
+uniform float u_RotationY = 0.5f;
+uniform float u_RotationK = 0.7f;
 
-uniform float u_ColorMatchThresholdC;
-uniform float u_ColorMatchThresholdM;
-uniform float u_ColorMatchThresholdY;
-uniform float u_ColorMatchThresholdK;
-uniform float u_ColorMatchThresholdR;
-uniform float u_ColorMatchThresholdG;
-uniform float u_ColorMatchThresholdB;
+uniform float u_ColorMatchThresholdC = 0.f;
+uniform float u_ColorMatchThresholdM = 0.f;
+uniform float u_ColorMatchThresholdY = 0.f;
+uniform float u_ColorMatchThresholdK = 0.f;
+uniform float u_ColorMatchThresholdR = 0.f;
+uniform float u_ColorMatchThresholdG = 0.f;
+uniform float u_ColorMatchThresholdB = 0.f;
 
-uniform float u_ClearColorR;
-uniform float u_ClearColorG;
-uniform float u_ClearColorB;
+uniform float4 u_ClearColor = { 1.f, 0.98f, 0.95f, 1.f };
 
 // https://www.rapidtables.com/convert/color/rgb-to-cmyk.html
 float getBlackValue(float4 color) {
@@ -59,10 +57,6 @@ float getMagentaValue(float4 color) {
 float getYellowValue(float4 color) {
     float blackValue = getBlackValue(color);
     return (1.f - color.b - blackValue) / (1.f - blackValue);    
-}
-
-float normalizeInputVal(float value) {
-    return (value + 1000.f) / 2000.f;
 }
 
 struct sampleData {
@@ -145,40 +139,34 @@ sampleData getSampleColor(float rotation,
 }
 
 float4 mainImage( VertData v_in ) : TARGET {
-    float4 clearColor = float4(
-            normalizeInputVal(u_ClearColorR), 
-            normalizeInputVal(u_ClearColorG), 
-            normalizeInputVal(u_ClearColorB), 
-            1.f);
-
     float4 texColor = image.Sample(textureSampler, v_in.uv);
 
-    if (COLOR_MATCH_BLACK && distance(texColor.rgb, BLACK.rgb) < normalizeInputVal(u_ColorMatchThresholdK)) {
+    if (COLOR_MATCH_BLACK && distance(texColor.rgb, BLACK.rgb) < u_ColorMatchThresholdK) {
         return BLACK;
     }
 
     if (COLOR_MATCH_COLOR) {
-        if (distance(texColor.rgb, CYAN.rgb) < normalizeInputVal(u_ColorMatchThresholdC)) {
+        if (distance(texColor.rgb, CYAN.rgb) < u_ColorMatchThresholdC) {
             return CYAN;
         }
 
-        if (distance(texColor.rgb, MAGENTA.rgb) < normalizeInputVal(u_ColorMatchThresholdM)) {
+        if (distance(texColor.rgb, MAGENTA.rgb) < u_ColorMatchThresholdM) {
             return MAGENTA;
         }
 
-        if (distance(texColor.rgb, YELLOW.rgb) < normalizeInputVal(u_ColorMatchThresholdY)) {
+        if (distance(texColor.rgb, YELLOW.rgb) < u_ColorMatchThresholdY) {
             return YELLOW;
         }
 
-        if (distance(texColor.rgb, RED.rgb) < normalizeInputVal(u_ColorMatchThresholdR)) {
+        if (distance(texColor.rgb, RED.rgb) < u_ColorMatchThresholdR) {
             return RED;
         }
 
-        if (distance(texColor.rgb, GREEN.rgb) < normalizeInputVal(u_ColorMatchThresholdG)) {
+        if (distance(texColor.rgb, GREEN.rgb) < u_ColorMatchThresholdG) {
             return GREEN;
         }
 
-        if (distance(texColor.rgb, BLUE.rgb) < normalizeInputVal(u_ColorMatchThresholdB)) {
+        if (distance(texColor.rgb, BLUE.rgb) < u_ColorMatchThresholdB) {
             return BLUE;
         }
     }
@@ -195,11 +183,11 @@ float4 mainImage( VertData v_in ) : TARGET {
         0.f, 1.f
     );
 
-    float gridSize = max(pow(normalizeInputVal(u_SampleSize), 2.f), .00001f);
-    float maxDist = normalizeInputVal(u_DotCoverage) * gridSize / 2.f;
+    float gridSize = max(pow(u_SampleSize, 2.f), .00001f);
+    float maxDist = u_DotCoverage * gridSize / 2.f;
 
     sampleData blackSampleData = getSampleColor(
-            normalizeInputVal(u_RotationK) * TWOPI, 
+            u_RotationK * TWOPI, 
             scaleMatrix, 
             inverseScaleMatrix, 
             v_in.uv, 
@@ -215,7 +203,7 @@ float4 mainImage( VertData v_in ) : TARGET {
     }
 
     sampleData cyanSampleData = getSampleColor(
-            normalizeInputVal(u_RotationC) * TWOPI, 
+            u_RotationC * TWOPI, 
             scaleMatrix, 
             inverseScaleMatrix, 
             v_in.uv, 
@@ -231,7 +219,7 @@ float4 mainImage( VertData v_in ) : TARGET {
     }
 
     sampleData magentaSampleData = getSampleColor(
-            normalizeInputVal(u_RotationM) * TWOPI, 
+            u_RotationM * TWOPI, 
             scaleMatrix, 
             inverseScaleMatrix, 
             v_in.uv, 
@@ -247,7 +235,7 @@ float4 mainImage( VertData v_in ) : TARGET {
     }
 
     sampleData yellowSampleData = getSampleColor(
-            normalizeInputVal(u_RotationY) * TWOPI, 
+            u_RotationY * TWOPI, 
             scaleMatrix, 
             inverseScaleMatrix, 
             v_in.uv, 
@@ -264,10 +252,10 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     // multiply colors for subtractive color mixing
     return 
-        lerp(clearColor, BLACK, blackDrawValue) * 
-        lerp(clearColor, CYAN, cyanDrawValue) * 
-        lerp(clearColor, YELLOW, yellowDrawValue) * 
-        lerp(clearColor, MAGENTA, magentaDrawValue);
+        lerp(u_ClearColor, BLACK, blackDrawValue) * 
+        lerp(u_ClearColor, CYAN, cyanDrawValue) * 
+        lerp(u_ClearColor, YELLOW, yellowDrawValue) * 
+        lerp(u_ClearColor, MAGENTA, magentaDrawValue);
 }
 
 
