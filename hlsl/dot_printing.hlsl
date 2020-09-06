@@ -21,7 +21,7 @@
 #define AA .001f
 #define ALMOST_ZERO .00001f
 
-uniform float u_SampleSize = 0.08f;
+uniform float u_SampleSize = 0.09f;
 uniform float u_DotCoverage = 1.f;
 
 uniform float u_RotationC = 0.1f;
@@ -32,7 +32,7 @@ uniform float u_RotationK = 0.7f;
 uniform float u_ColorMatchThresholdC = 0.f;
 uniform float u_ColorMatchThresholdM = 0.f;
 uniform float u_ColorMatchThresholdY = 0.f;
-uniform float u_ColorMatchThresholdK = 0.f;
+uniform float u_ColorMatchThresholdK = 0.18f;
 uniform float u_ColorMatchThresholdR = 0.f;
 uniform float u_ColorMatchThresholdG = 0.f;
 uniform float u_ColorMatchThresholdB = 0.f;
