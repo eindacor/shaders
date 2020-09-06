@@ -1,16 +1,19 @@
 
 #define TWOPI 6.28318530718f
-#define AA .0001f
+#define AA 0.001f
 #define SAMPLE_INCREMENTS 4
-#define MAX_HATCH_LINES 6
+#define MAX_HATCH_LINES 10
+#define SAMPLE_SIZE 0.001f
 
 uniform float u_GlobalHatchRotation = 0.15f;
-uniform float u_SampleDistance = 0.1f;
 uniform float u_HatchAngleIncrement = 0.6f;
-uniform float u_HatchDistance = 0.2f;
-uniform float u_HatchLineThickness = 0.03f;
+uniform float u_HatchDistance = 0.08f;
+uniform float u_HatchLineThickness = 0.07f;
 uniform float u_AdjustBrightness = 0.1f;
-uniform float u_HatchLines = .75f;
+uniform float u_HatchLines = 0.5f;
+uniform float u_LineFuzziness = 0.6f;
+uniform float u_LineWaviness = 0.1f;
+uniform float u_LineWavelength = 0.1f;
 
 uniform float4 u_ClearColor = { 1.f, 1.f, 1.f, 1.f };
 uniform float4 u_LineColor = { 0.f, 0.f, 0.f, 1.f};
@@ -85,25 +88,71 @@ SampleData getSampleData(float2 uv, AspectRatioMatrices aspectRatioMatrices, flo
     return sampleData;
 }
 
-float getHatchValue(float2 uv, float rotation, AspectRatioMatrices aspectRatioMatrices) {
-    float2x2 rotationMatrix = float2x2(
+// from https://www.shadertoy.com/view/4djSRW
+float hash(float2 p)
+{
+    float val = sin(dot(p, float2(12.9898f, 78.233f))) * 43758.5453f;
+    return val - floor(val);
+}
+
+float randomSignedValue(float2 p) {
+    return hash(p) * 2.f - 1.f;
+}
+
+float2x2 createRotationMatrix(float rotation) {
+    return float2x2(
         cos(rotation), -sin(rotation),
         sin(rotation), cos(rotation)
     );
+}
 
-    float adjustedUV = mul(uv, mul(aspectRatioMatrices.scaleMatrix, rotationMatrix));
+float getHatchValue(float2 uv, float rotation, AspectRatioMatrices aspectRatioMatrices) {
     float hatchDist = pow(u_HatchDistance, 3.f);
+
+    float2x2 rotationMatrix = createRotationMatrix(rotation);
+
+    float2 adjustedUV = mul(uv, mul(aspectRatioMatrices.scaleMatrix, rotationMatrix));
 
     float closestLineX = round(adjustedUV.x / hatchDist) * hatchDist;
 
-    float lineThickness = pow(u_HatchLineThickness, 2.f);
-    float leftLineEdge = closestLineX - lineThickness / 2.f;
-    float rightLineEdge = closestLineX + lineThickness / 2.f;
+    float previousYNode = floor(adjustedUV.y / u_LineWavelength) * u_LineWavelength;
+    float nextYNode = ceil(adjustedUV.y / u_LineWavelength) * u_LineWavelength;
 
-    if (closestLineX > adjustedUV.x) {
-        return smoothstep(leftLineEdge - AA, leftLineEdge + AA, adjustedUV.x);
+    // modify nodes by some random, deterministic value
+    float lineWaviness = 0.1f * u_LineWaviness;
+    float2 previousNode = 
+        float2(closestLineX + lineWaviness * randomSignedValue(float2(closestLineX, previousYNode)),
+            previousYNode);
+    float2 nextNode = 
+        float2(closestLineX + lineWaviness * randomSignedValue(float2(closestLineX, nextYNode)), 
+            nextYNode);
+
+    float segmentAngle = atan((previousNode.y - nextNode.y) / (previousNode.x - nextNode.x));
+    float2x2 lineRotationMatrix = createRotationMatrix(segmentAngle);
+
+    // essentially rotate the sample UV around the previous node, 
+    // then check to see how close it is to that line
+    float2 lineSampleUV = adjustedUV - previousNode;
+    lineSampleUV = mul(lineSampleUV, lineRotationMatrix);
+
+    float lineThickness = pow(u_HatchLineThickness, 2.f);
+    float halfThickness = lineThickness / 2.f;
+    // lineSampleUV should now be in the coordinate space of the hatch line segment
+    // TODO take noise calcs from below and re-apply here
+
+    float maxLineFuzziness = .5f * u_LineFuzziness;
+    float topLineFuzz = randomSignedValue(uv) * maxLineFuzziness * lineThickness;
+    float bottomLineFuzz = randomSignedValue(adjustedUV) * maxLineFuzziness * lineThickness;
+
+    float upperLineEdge = halfThickness + topLineFuzz;
+    float lowerLineEdge = -halfThickness + bottomLineFuzz;
+
+    // TODO add another fuzz factor for within lines that tends towards 1
+
+    if (lineSampleUV.y > 0.f) {
+        return smoothstep(upperLineEdge + AA, upperLineEdge - AA, lineSampleUV.y);
     } else {
-        return smoothstep(rightLineEdge + AA, rightLineEdge - AA, adjustedUV.x);
+        return smoothstep(lowerLineEdge - AA, lowerLineEdge + AA, lineSampleUV.y);
     }
 }
 
@@ -115,8 +164,7 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float2 aspectUV = mul(uv, aspectRatioMatrices.scaleMatrix);
 
-    float sampleSize = pow(u_SampleDistance, 3.f);
-    SampleData sampleData = getSampleData(uv, aspectRatioMatrices, sampleSize);
+    SampleData sampleData = getSampleData(uv, aspectRatioMatrices, SAMPLE_SIZE);
 
     int hatchCount = getHatchCount(getBrightness(sampleData.color.rgb));
 
@@ -125,7 +173,11 @@ float4 mainImage( VertData v_in ) : TARGET {
     for (int i=0; i<hatchCount; i++) {
         float hatchRotation = float(i + 1) * hatchAngleIncrement * u_GlobalHatchRotation;
         float hatchValue = getHatchValue(uv, hatchRotation, aspectRatioMatrices);
-        outColor = lerp(outColor, u_LineColor, hatchValue);
+
+        // add some noise to actual stroke of the line so it isn't 100% solid
+        // TODO replace with noise maps so it isn't so inconsistent
+        float innerFuzziness = 1.f - (hash(uv) * .5f);
+        outColor = lerp(outColor, u_LineColor, hatchValue * innerFuzziness);
     }
     
     return outColor;
