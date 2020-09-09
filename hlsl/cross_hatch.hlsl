@@ -24,7 +24,7 @@ int getHatchCount(float brightness) {
 }
 
 float getBrightness(float3 color) {
-    return (color.r + color.g + color.b) / 3.f;
+    return (color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f);
 }
 
 struct AspectRatioMatrices {

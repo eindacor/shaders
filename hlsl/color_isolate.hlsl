@@ -8,7 +8,7 @@ uniform float4 u_Color2 = { 0.f, 0.f, 0.f, 1.0};
 uniform float u_MatchThreshold_2 = 0.f;
 
 float getBrightness(float3 color) {
-    return (color.r + color.g + color.b) / 3.f;
+    return (color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f);
 }
 
 #define maxColorDistance 1.73f

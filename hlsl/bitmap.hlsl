@@ -7,7 +7,7 @@ uniform float4 u_CompareColor = { 1.f, 1.f, 1.f, 1.0f };
 uniform float4 u_ClearColor = { 0.f, 0.f, 0.f, 1.0f };
 
 float getBrightness(float3 color) {
-    return (color.r + color.g + color.b) / 3.f;
+    return (color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f);
 }
 
 float4 mainImage( VertData v_in ) : TARGET
