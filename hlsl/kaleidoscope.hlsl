@@ -2,9 +2,11 @@
 
 #define MAIN_TRIANGLE_HEIGHT .5f
 #define TWOPI 6.28318530718f
+#define AA 0.001f
 
 uniform float u_TimeScaleModifier = .1f;
 uniform float u_ScaleModifier = .8f;
+uniform float u_HexBorderThickness = 0.f;
 uniform int u_KaleidoscopeLevels = 2;
 
 struct AspectRatioData {
@@ -123,7 +125,10 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     for (int i=0; i<u_KaleidoscopeLevels; i++) {
         kaleidoscopedUV = getKaleidoscopedUV(kaleidoscopedUV, aspectRatioData);
+        if (u_HexBorderThickness > .0001f && kaleidoscopedUV.y > 1.f - u_HexBorderThickness) {
+            return float4(0.f, 1.f, 0.f, 1.f);
+        }     
     }
-    
+  
     return image.Sample(textureSampler, kaleidoscopedUV);
 }
