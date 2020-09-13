@@ -4,7 +4,7 @@
 #define TWOPI 6.28318530718f
 
 uniform float u_TimeScaleModifier = .1f;
-uniform float u_ScaleModifier = .5f;
+uniform float u_ScaleModifier = .8f;
 uniform int u_KaleidoscopeLevels = 2;
 
 struct AspectRatioData {
@@ -96,7 +96,6 @@ float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
     
     int offsetIndex = int(round(floor(offsetAngle / sixtyDegrees)));
 
-    bool mirror = fmod(offsetIndex, 2) == 1;
     float rotation = float(offsetIndex) * sixtyDegrees;
     
     float2x2 rotationMatrix = createRotationMatrix(rotation);
@@ -106,15 +105,11 @@ float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
     // (y flipped in hlsl)
     float sampleY = kaleidUV.y / shortRadius;
     
-    // code below essentially gets its x sample value from the interpolation 
-    // between one side of the perfect triangle to the other,
-    // the translates that to the image's uv space
-    float xDist = shortRadius / tan(sixtyDegrees) * aspectRatioData.aspectRatio;
-    float delta = xDist * 2.f;
-    float valueDelta = kaleidUV.x + xDist;
-    float sampleX = valueDelta / delta;
+    // TODO why does atan(60) work here? found via debugging, investigate
+    float modifiedHexRadius = hexRadius * atan(60.f);
+    float sampleX = (kaleidUV.x + modifiedHexRadius / 2.f) / modifiedHexRadius;
 
-    if (mirror) {
+    if (fmod(offsetIndex, 2) == 1) {
         sampleX = 1.f - sampleX;
     }
     
