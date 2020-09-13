@@ -5,6 +5,7 @@
 
 uniform float u_TimeScaleModifier = .1f;
 uniform float u_ScaleModifier = .5f;
+uniform int u_KaleidoscopeLevels = 2;
 
 struct AspectRatioData {
     float2x2 scaleMatrix;
@@ -55,14 +56,10 @@ float2x2 createRotationMatrix(float rotation) {
     );
 }
 
-float4 mainImage( VertData v_in ) : TARGET {
-    // Normalized pixel coordinates (from 0 to 1)
-    float2 uv = v_in.uv;
+float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
     float timeScale = elapsed_time * .5f * u_TimeScaleModifier;
     uv += float2(2.f, -1.f);
     uv += float2(sin(timeScale), timeScale);
-
-    AspectRatioData aspectRatioData = getAspectRatioData(uv_size);
 
     float2 aspectUV = mul(uv, aspectRatioData.scaleMatrix);
     
@@ -83,11 +80,13 @@ float4 mainImage( VertData v_in ) : TARGET {
     float2 hexCenter;
     if (isHexCenter(leftBottom, hexGridXIncrement, hexGridYIncrement)) {
         float2 rightTop = float2(rightEdge, topEdge);
-        hexCenter = distance(aspectUV, leftBottom) < distance(aspectUV, rightTop) ? leftBottom : rightTop;
+        hexCenter = distance(aspectUV, leftBottom) < distance(aspectUV, rightTop) ? 
+            leftBottom : rightTop;
     } else {
         float2 leftTop = float2(leftEdge, topEdge);
         float2 rightBottom = float2(rightEdge, bottomEdge);
-        hexCenter = distance(aspectUV, leftTop) < distance(aspectUV, rightBottom) ? leftTop : rightBottom;
+        hexCenter = distance(aspectUV, leftTop) < distance(aspectUV, rightBottom) ? 
+            leftTop : rightBottom;
     }
     
     float distFromHexCenter = distance(aspectUV, hexCenter);
@@ -103,10 +102,12 @@ float4 mainImage( VertData v_in ) : TARGET {
     float2x2 rotationMatrix = createRotationMatrix(rotation);
     
     float2 kaleidUV = mul((aspectUV - hexCenter), rotationMatrix);
-    // kaleidUV should now be above 0,0, within the perfect triangle below (y flipped in hlsl)
+    // kaleidUV should now be above 0,0, within the perfect triangle below 
+    // (y flipped in hlsl)
     float sampleY = kaleidUV.y / shortRadius;
     
-    // code below essentially gets its x sample value from the interpolation between one side of the perfect triangle to the other,
+    // code below essentially gets its x sample value from the interpolation 
+    // between one side of the perfect triangle to the other,
     // the translates that to the image's uv space
     float xDist = shortRadius / tan(sixtyDegrees) * aspectRatioData.aspectRatio;
     float delta = xDist * 2.f;
@@ -117,5 +118,17 @@ float4 mainImage( VertData v_in ) : TARGET {
         sampleX = 1.f - sampleX;
     }
     
-    return image.Sample(textureSampler, float2(sampleX, sampleY));
+    return float2(sampleX, sampleY);
+}
+
+float4 mainImage( VertData v_in ) : TARGET {
+    AspectRatioData aspectRatioData = getAspectRatioData(uv_size);
+
+    float2 kaleidoscopedUV = v_in.uv;
+
+    for (int i=0; i<u_KaleidoscopeLevels; i++) {
+        kaleidoscopedUV = getKaleidoscopedUV(kaleidoscopedUV, aspectRatioData);
+    }
+    
+    return image.Sample(textureSampler, kaleidoscopedUV);
 }
