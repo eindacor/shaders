@@ -2,6 +2,7 @@
 #define WINDOW_DIVISIONS 4
 
 uniform float u_LineThickness = .001f;
+uniform float4 u_BackgroundColor = {1.f, 1.f, 1.f, 1.f};
 
 
 struct AspectRatioData {
@@ -43,5 +44,5 @@ float4 mainImage( VertData v_in ) : TARGET {
         return getReturnColor(uv);
     }
 
-    return float4(0.f, 0.f, 0.f, 1.f);
+    return u_BackgroundColor;
 }

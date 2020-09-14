@@ -10,6 +10,7 @@ uniform float u_HexRadius = .8f;
 uniform float u_HexBorderThickness = 0.f;
 uniform int u_KaleidoscopeLevels = 2;
 uniform float4 u_BorderColor = {1.f, 1.f, 1.f, 1.f};
+uniform float u_DebugValue = 0.f;
 
 struct AspectRatioData {
     float2x2 scaleMatrix;
@@ -60,38 +61,95 @@ float2x2 createRotationMatrix(float rotation) {
     );
 }
 
+float3 float2ToFloat3(float2 vec) {
+    return float3(vec.x, vec.y, 0.f);
+}
+
+float4 getColorFromValue(float val) {
+    return float4(val, 0.f, 0.f, 1.f);
+}
+
 // TODO can swap out hexRadius for modifiedHexRadius in caller
-float2 getKaleidoscopedUV(float2 uv, 
+float4 getKaleidoscopedUV(float2 uv, 
                         AspectRatioData aspectRatioData, 
-                        float modifiedHexRadius, 
+                        float hexRadius, 
                         float shortRadius, 
                         float angle,
                         float hexGridXIncrement,
                         float hexGridYIncrement) 
 {
     float2 aspectUV = mul(uv, aspectRatioData.scaleMatrix);
-    
-    float leftEdge = floor(aspectUV.x / hexGridXIncrement) * hexGridXIncrement;
-    float rightEdge = leftEdge + hexGridXIncrement;
+
+    float aspectHexGridXIncrement = hexGridXIncrement;
+
+    float leftEdge = floor(aspectUV.x / aspectHexGridXIncrement) * aspectHexGridXIncrement;
+    float rightEdge = leftEdge + aspectHexGridXIncrement;
     float bottomEdge = floor(aspectUV.y / hexGridYIncrement) * hexGridYIncrement;
     float topEdge = bottomEdge + hexGridYIncrement;
+
+    // TODO bounds of the ortho-hex grid are identified. from there, find appropriate hex center
+    // TODO move all points so 0,0 is actually at topRight
     
     float2 leftBottom = float2(leftEdge, bottomEdge);
+    float2 leftTop = float2(leftEdge, topEdge);
+    float2 rightTop = float2(rightEdge, topEdge);
+    float2 rightBottom = float2(rightEdge, bottomEdge);
     
-    float2 hexCenter;
-    if (isHexCenter(leftBottom, hexGridXIncrement, hexGridYIncrement)) {
-        float2 rightTop = float2(rightEdge, topEdge);
-        hexCenter = distance(aspectUV, leftBottom) < distance(aspectUV, rightTop) ? 
-            leftBottom : rightTop;
+    float aspectHexRadius = hexRadius;
+    float2 hexCenter = float2(-1.f, -1.f);
+
+    // TODO Y axis is flipped in HLSL!
+    // TODO isHexCenter is working!
+    if (isHexCenter(leftBottom, aspectHexGridXIncrement, hexGridYIncrement)) {
+        float2 hexDiagRight = leftBottom + float2(aspectHexRadius, 0.f);
+        float2 hexDiagLeft = leftTop + float2(aspectHexRadius / 2.f, 0.f);
+
+        if (distance(aspectUV, hexDiagLeft) < .01f || distance(aspectUV, hexDiagRight) < .01f) {
+            return getColorFromValue(1.f);
+        }
+
+        float2 sharedEdgeVector = normalize(float2(hexDiagLeft - hexDiagRight));
+        float2 sharedToRightTopVector = normalize(float2(rightTop - hexDiagRight));
+        float2 sharedToUVVector = normalize(float2(aspectUV - hexDiagRight));
+
+        float3 crossRightTop = cross(float2ToFloat3(sharedEdgeVector), 
+                                    float2ToFloat3(sharedToRightTopVector));
+        float3 crossUV = cross(float2ToFloat3(sharedEdgeVector), 
+                                float2ToFloat3(sharedToUVVector));
+
+        hexCenter = (crossRightTop.z == crossUV.z) || 
+            (crossRightTop.z < 0.f && crossUV.z < 0.f) || 
+            (crossRightTop.z > 0.f && crossUV.z > 0.f) ? rightTop : leftBottom;
     } else {
         float2 leftTop = float2(leftEdge, topEdge);
-        float2 rightBottom = float2(rightEdge, bottomEdge);
-        hexCenter = distance(aspectUV, leftTop) < distance(aspectUV, rightBottom) ? 
-            leftTop : rightBottom;
+
+        float2 hexDiagRight = leftTop + float2(aspectHexRadius, 0.f);
+        float2 hexDiagLeft = rightBottom - float2(aspectHexRadius, 0.f);
+
+        if (distance(aspectUV, hexDiagLeft) < .01f || distance(aspectUV, hexDiagRight) < .01f) {
+            return getColorFromValue(1.f);
+        }
+
+        
+        float2 sharedEdgeVector = normalize(float2(hexDiagRight - hexDiagLeft));
+        float2 sharedToRightBottomVector = normalize(float2(rightBottom - hexDiagLeft));
+        float2 sharedToUVVector = normalize(float2(aspectUV - hexDiagLeft));
+
+        float3 crossRightBottom = cross(float2ToFloat3(sharedEdgeVector), 
+                                        float2ToFloat3(sharedToRightBottomVector));
+        float3 crossUV = cross(float2ToFloat3(sharedEdgeVector), 
+                                float2ToFloat3(sharedToUVVector));
+
+        hexCenter = crossRightBottom.z == crossUV.z || 
+            (crossRightBottom.z < 0.f && crossUV.z < 0.f) || 
+            (crossRightBottom.z > 0.f && crossUV.z > 0.f) ? rightBottom : leftTop;
     }
-    
-    float distFromHexCenter = distance(aspectUV, hexCenter);
-    
+
+    if (distance(aspectUV, hexCenter) < .02f) {
+        return float4(0.f, 0.f, 0.f, 1.f);
+    }
+
+        
     float offsetAngle = getOffsetAngle(hexCenter, aspectUV);
     // mulitplying by 5 rotates the uv so the default orientation (0 radians) is facing downward
     offsetAngle = fmod(offsetAngle + 5.f * angle, TWOPI);
@@ -101,19 +159,31 @@ float2 getKaleidoscopedUV(float2 uv,
     float rotation = float(offsetIndex) * angle;
     
     float2x2 rotationMatrix = createRotationMatrix(rotation);
+
+    // TODO calcs are correct until this point
+
+
     
+    float2 unaspectedHexCenter = mul(hexCenter, aspectRatioData.inverseScaleMatrix);
     float2 kaleidUV = mul((aspectUV - hexCenter), rotationMatrix);
     // kaleidUV should now be above 0,0, within the perfect triangle below 
     // (y flipped in hlsl)
+    float aspectRatio = aspectRatioData.aspectRatio;
     float sampleY = kaleidUV.y / shortRadius;
-    
-    float sampleX = (kaleidUV.x + modifiedHexRadius / 2.f) / modifiedHexRadius;
+    // this identifies where it is in the triangle, not the image
+    float triangleXCoord = (kaleidUV.x + hexRadius / 2.f) / hexRadius; 
+    // triangleXCoord is expected value!
+    float sampleX = triangleXCoord;
+
+    float imageWidthAtScale = shortRadius * aspectRatio;
+    float imageTriangleDelta = imageWidthAtScale - hexRadius;
+    sampleX = (imageTriangleDelta / 2.f + triangleXCoord * hexRadius) / imageWidthAtScale;
 
     if (fmod(offsetIndex, 2) == 1) {
         sampleX = 1.f - sampleX;
     }
     
-    return float2(sampleX, sampleY);
+    return image.Sample(textureSampler, float2(sampleX, sampleY));
 }
 
 float4 mainImage( VertData v_in ) : TARGET {
@@ -123,20 +193,18 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float shortRadius = u_HexRadius * sin(SIXTY_DEGREES);
 
-    // TODO why does atan(60) work here? found via debugging, investigate
-    float modifiedHexRadius = u_HexRadius * atan(SIXTY_DEGREES * 360.f / TWOPI);
-
     float hexGridXIncrement = 1.5f * u_HexRadius;
     float hexGridYIncrement = shortRadius;
 
     float timeScale = elapsed_time * .5f * u_TimeScaleModifier;
 
     for (int i=0; i<u_KaleidoscopeLevels; i++) {
-        kaleidoscopedUV += float2(sin(timeScale), timeScale);
-        kaleidoscopedUV = getKaleidoscopedUV(
+        //kaleidoscopedUV += float2(sin(timeScale), timeScale);
+        // kaleidoscopedUV = getKaleidoscopedUV(
+        return getKaleidoscopedUV(
             kaleidoscopedUV, 
             aspectRatioData, 
-            modifiedHexRadius, 
+            u_HexRadius, 
             shortRadius, 
             SIXTY_DEGREES,
             hexGridXIncrement,
