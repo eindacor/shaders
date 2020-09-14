@@ -8,6 +8,7 @@
 uniform float u_TimeScaleModifier = .1f;
 uniform float u_HexRadius = .8f;
 uniform float u_HexBorderThickness = 0.f;
+uniform float u_HexTriangleThickness = 0.f;
 uniform float u_HexCenterRadius = 0.f;
 uniform int u_KaleidoscopeLevels = 2;
 uniform float4 u_BorderColor = {1.f, 1.f, 1.f, 1.f};
@@ -72,36 +73,17 @@ struct KaleidSampleData {
     float2 uv;
 };
 
-KaleidSampleData getKaleidoscopedUV(float2 uv, 
-                        AspectRatioData aspectRatioData, 
-                        float hexRadius, 
-                        float shortRadius, 
-                        float angle,
-                        float hexGridXIncrement,
-                        float hexGridYIncrement) 
-{
-    float2 aspectUV = mul(uv, aspectRatioData.scaleMatrix);
+float2 getHexCenter(float2 aspectUV, 
+                    float2 leftBottom, 
+                    float2 leftTop, 
+                    float2 rightBottom, 
+                    float2 rightTop,
+                    float aspectHexGridXIncrement, 
+                    float hexGridYIncrement,
+                    float aspectHexRadius) {
+    float2 hexCenter = float2(-1.f, -1.f); 
 
-    float aspectHexGridXIncrement = hexGridXIncrement;
-
-    float leftEdge = floor(aspectUV.x / aspectHexGridXIncrement) * aspectHexGridXIncrement;
-    float rightEdge = leftEdge + aspectHexGridXIncrement;
-    float bottomEdge = floor(aspectUV.y / hexGridYIncrement) * hexGridYIncrement;
-    float topEdge = bottomEdge + hexGridYIncrement;
-    
-    float2 leftBottom = float2(leftEdge, bottomEdge);
-    float2 leftTop = float2(leftEdge, topEdge);
-    float2 rightTop = float2(rightEdge, topEdge);
-    float2 rightBottom = float2(rightEdge, bottomEdge);
-    
-    float aspectHexRadius = hexRadius;
-    float2 hexCenter = float2(-1.f, -1.f);
-
-    KaleidSampleData kaleidSampleData;
-    kaleidSampleData.colorReturned = false;
-    kaleidSampleData.color = float4(0.f, 0.f, 0.f, 1.f);
-    kaleidSampleData.uv = float2(0.f, 0.f);
-
+    // // if uv is close to hexCenter -> hexDiagRight || hexDiagLeft, return border color
     if (isHexCenter(leftBottom, aspectHexGridXIncrement, hexGridYIncrement)) {
         float2 hexDiagRight = leftBottom + float2(aspectHexRadius, 0.f);
         float2 hexDiagLeft = leftTop + float2(aspectHexRadius / 2.f, 0.f);
@@ -118,8 +100,6 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
             (crossRightTop.z < 0.f && crossUV.z < 0.f) || 
             (crossRightTop.z > 0.f && crossUV.z > 0.f) ? rightTop : leftBottom;
     } else {
-        float2 leftTop = float2(leftEdge, topEdge);
-
         float2 hexDiagRight = leftTop + float2(aspectHexRadius, 0.f);
         float2 hexDiagLeft = rightBottom - float2(aspectHexRadius, 0.f);
         float2 sharedEdgeVector = normalize(float2(hexDiagRight - hexDiagLeft));
@@ -135,6 +115,46 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
             (crossRightBottom.z < 0.f && crossUV.z < 0.f) || 
             (crossRightBottom.z > 0.f && crossUV.z > 0.f) ? rightBottom : leftTop;
     }
+
+    return hexCenter;
+}
+
+KaleidSampleData getKaleidoscopedUV(float2 uv, 
+                        AspectRatioData aspectRatioData, 
+                        float hexRadius, 
+                        float shortRadius, 
+                        float angle,
+                        float hexGridXIncrement,
+                        float hexGridYIncrement) 
+{
+    float2 aspectUV = mul(uv, aspectRatioData.scaleMatrix);
+
+    float aspectHexGridXIncrement = hexGridXIncrement;
+
+    float leftEdge = floor(aspectUV.x / aspectHexGridXIncrement) * aspectHexGridXIncrement;
+    float rightEdge = leftEdge + aspectHexGridXIncrement;
+    float bottomEdge = floor(aspectUV.y / hexGridYIncrement) * hexGridYIncrement;
+    float topEdge = bottomEdge + hexGridYIncrement;
+
+    KaleidSampleData kaleidSampleData;
+    kaleidSampleData.colorReturned = false;
+    kaleidSampleData.color = float4(0.f, 0.f, 0.f, 1.f);
+    kaleidSampleData.uv = float2(0.f, 0.f);
+    
+    float2 leftBottom = float2(leftEdge, bottomEdge);
+    float2 leftTop = float2(leftEdge, topEdge);
+    float2 rightTop = float2(rightEdge, topEdge);
+    float2 rightBottom = float2(rightEdge, bottomEdge);
+
+    float aspectHexRadius = hexRadius;
+    float2 hexCenter = getHexCenter(aspectUV,
+                            leftBottom, 
+                            leftTop, 
+                            rightBottom, 
+                            rightTop, 
+                            aspectHexGridXIncrement, 
+                            hexGridYIncrement,
+                            aspectHexRadius);
 
     if (u_HexCenterRadius > .0001f && distance(aspectUV, hexCenter) < u_HexCenterRadius * .5f) {
         kaleidSampleData.colorReturned = true;
@@ -156,6 +176,25 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
     float2 kaleidUV = mul((aspectUV - hexCenter), rotationMatrix);
     // kaleidUV should now be above 0,0, within the perfect triangle below 
     // (y flipped in hlsl)
+
+    if (u_HexTriangleThickness > .0001f) {
+        float triangleTestRotationMatrix = createRotationMatrix(SIXTY_DEGREES / 2.f);
+        float thicknessCheck = u_HexTriangleThickness * .25f;
+
+        float2 relocatedUV = mul(kaleidUV, createRotationMatrix(SIXTY_DEGREES / 2.f));
+        if (abs(relocatedUV.x) < thicknessCheck) {
+            kaleidSampleData.colorReturned = true;
+            kaleidSampleData.color = u_BorderColor;
+            return kaleidSampleData;
+        }
+
+        relocatedUV = mul(kaleidUV, createRotationMatrix(-SIXTY_DEGREES / 2.f));
+        if (abs(relocatedUV.x) < thicknessCheck) {
+            kaleidSampleData.colorReturned = true;
+            kaleidSampleData.color = u_BorderColor;
+            return kaleidSampleData;
+        }
+    }
 
     float aspectRatio = aspectRatioData.aspectRatio;
     float sampleY = kaleidUV.y / shortRadius;
