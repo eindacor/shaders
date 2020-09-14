@@ -3,11 +3,13 @@
 #define MAIN_TRIANGLE_HEIGHT .5f
 #define TWOPI 6.28318530718f
 #define AA 0.001f
+#define SIXTY_DEGREES TWOPI/6.f
 
 uniform float u_TimeScaleModifier = .1f;
-uniform float u_ScaleModifier = .8f;
+uniform float u_HexRadius = .8f;
 uniform float u_HexBorderThickness = 0.f;
 uniform int u_KaleidoscopeLevels = 2;
+uniform float4 u_BorderColor = {1.f, 1.f, 1.f, 1.f};
 
 struct AspectRatioData {
     float2x2 scaleMatrix;
@@ -58,19 +60,16 @@ float2x2 createRotationMatrix(float rotation) {
     );
 }
 
-float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
-    float timeScale = elapsed_time * .5f * u_TimeScaleModifier;
-    uv += float2(2.f, -1.f);
-    uv += float2(sin(timeScale), timeScale);
-
+// TODO can swap out hexRadius for modifiedHexRadius in caller
+float2 getKaleidoscopedUV(float2 uv, 
+                        AspectRatioData aspectRatioData, 
+                        float modifiedHexRadius, 
+                        float shortRadius, 
+                        float angle,
+                        float hexGridXIncrement,
+                        float hexGridYIncrement) 
+{
     float2 aspectUV = mul(uv, aspectRatioData.scaleMatrix);
-    
-    float hexRadius = 1.f * u_ScaleModifier;
-    float sixtyDegrees = TWOPI / 6.f;
-    float shortRadius = hexRadius * sin(sixtyDegrees);
-    
-    float hexGridXIncrement = 1.5f * hexRadius;
-    float hexGridYIncrement = shortRadius;
     
     float leftEdge = floor(aspectUV.x / hexGridXIncrement) * hexGridXIncrement;
     float rightEdge = leftEdge + hexGridXIncrement;
@@ -94,11 +93,12 @@ float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
     float distFromHexCenter = distance(aspectUV, hexCenter);
     
     float offsetAngle = getOffsetAngle(hexCenter, aspectUV);
-    offsetAngle = fmod(offsetAngle + 5.f * sixtyDegrees, TWOPI);
+    // mulitplying by 5 rotates the uv so the default orientation (0 radians) is facing downward
+    offsetAngle = fmod(offsetAngle + 5.f * angle, TWOPI);
     
-    int offsetIndex = int(round(floor(offsetAngle / sixtyDegrees)));
+    int offsetIndex = int(round(floor(offsetAngle / angle)));
 
-    float rotation = float(offsetIndex) * sixtyDegrees;
+    float rotation = float(offsetIndex) * angle;
     
     float2x2 rotationMatrix = createRotationMatrix(rotation);
     
@@ -107,8 +107,6 @@ float2 getKaleidoscopedUV(float2 uv, AspectRatioData aspectRatioData) {
     // (y flipped in hlsl)
     float sampleY = kaleidUV.y / shortRadius;
     
-    // TODO why does atan(60) work here? found via debugging, investigate
-    float modifiedHexRadius = hexRadius * atan(60.f);
     float sampleX = (kaleidUV.x + modifiedHexRadius / 2.f) / modifiedHexRadius;
 
     if (fmod(offsetIndex, 2) == 1) {
@@ -123,10 +121,28 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float2 kaleidoscopedUV = v_in.uv;
 
+    float shortRadius = u_HexRadius * sin(SIXTY_DEGREES);
+
+    // TODO why does atan(60) work here? found via debugging, investigate
+    float modifiedHexRadius = u_HexRadius * atan(SIXTY_DEGREES * 360.f / TWOPI);
+
+    float hexGridXIncrement = 1.5f * u_HexRadius;
+    float hexGridYIncrement = shortRadius;
+
+    float timeScale = elapsed_time * .5f * u_TimeScaleModifier;
+
     for (int i=0; i<u_KaleidoscopeLevels; i++) {
-        kaleidoscopedUV = getKaleidoscopedUV(kaleidoscopedUV, aspectRatioData);
+        kaleidoscopedUV += float2(sin(timeScale), timeScale);
+        kaleidoscopedUV = getKaleidoscopedUV(
+            kaleidoscopedUV, 
+            aspectRatioData, 
+            modifiedHexRadius, 
+            shortRadius, 
+            SIXTY_DEGREES,
+            hexGridXIncrement,
+            hexGridYIncrement);
         if (u_HexBorderThickness > .0001f && kaleidoscopedUV.y > 1.f - u_HexBorderThickness) {
-            return float4(0.f, 1.f, 0.f, 1.f);
+            return u_BorderColor;
         }     
     }
   
