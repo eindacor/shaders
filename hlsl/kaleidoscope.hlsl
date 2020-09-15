@@ -12,7 +12,15 @@ uniform float u_HexTriangleThickness = 0.f;
 uniform float u_HexCenterRadius = 0.f;
 uniform int u_KaleidoscopeLevels = 2;
 uniform float4 u_BorderColor = {1.f, 1.f, 1.f, 1.f};
-uniform float u_DebugValue = 0.f;
+uniform float4 u_TriangleColor = {1.f, 1.f, 1.f, 1.f};
+uniform float4 u_HexCenterColor = {1.f, 1.f, 1.f, 1.f};
+
+// from https://www.shadertoy.com/view/4djSRW
+float hash(float2 p)
+{
+    float val = sin(dot(p, float2(12.9898f, 78.233f))) * 43758.5453f;
+    return val - floor(val);
+}
 
 struct AspectRatioData {
     float2x2 scaleMatrix;
@@ -68,7 +76,6 @@ float3 float2ToFloat3(float2 vec) {
 }
 
 struct KaleidSampleData {
-    bool colorReturned;
     float4 color;
     float2 uv;
 };
@@ -137,8 +144,7 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
     float topEdge = bottomEdge + hexGridYIncrement;
 
     KaleidSampleData kaleidSampleData;
-    kaleidSampleData.colorReturned = false;
-    kaleidSampleData.color = float4(0.f, 0.f, 0.f, 1.f);
+    kaleidSampleData.color = float4(0.f, 0.f, 0.f, 0.f);
     kaleidSampleData.uv = float2(0.f, 0.f);
     
     float2 leftBottom = float2(leftEdge, bottomEdge);
@@ -156,12 +162,6 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
                             hexGridYIncrement,
                             aspectHexRadius);
 
-    if (u_HexCenterRadius > .0001f && distance(aspectUV, hexCenter) < u_HexCenterRadius * .5f) {
-        kaleidSampleData.colorReturned = true;
-        kaleidSampleData.color = u_BorderColor;
-        return kaleidSampleData;
-    }
-     
     float offsetAngle = getOffsetAngle(hexCenter, aspectUV);
     // mulitplying by 5 rotates the uv so the default orientation (0 radians) is facing downward
     offsetAngle = fmod(offsetAngle + 5.f * angle, TWOPI);
@@ -177,25 +177,6 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
     // kaleidUV should now be above 0,0, within the perfect triangle below 
     // (y flipped in hlsl)
 
-    if (u_HexTriangleThickness > .0001f) {
-        float triangleTestRotationMatrix = createRotationMatrix(SIXTY_DEGREES / 2.f);
-        float thicknessCheck = u_HexTriangleThickness * .25f;
-
-        float2 relocatedUV = mul(kaleidUV, createRotationMatrix(SIXTY_DEGREES / 2.f));
-        if (abs(relocatedUV.x) < thicknessCheck) {
-            kaleidSampleData.colorReturned = true;
-            kaleidSampleData.color = u_BorderColor;
-            return kaleidSampleData;
-        }
-
-        relocatedUV = mul(kaleidUV, createRotationMatrix(-SIXTY_DEGREES / 2.f));
-        if (abs(relocatedUV.x) < thicknessCheck) {
-            kaleidSampleData.colorReturned = true;
-            kaleidSampleData.color = u_BorderColor;
-            return kaleidSampleData;
-        }
-    }
-
     float aspectRatio = aspectRatioData.aspectRatio;
     float sampleY = kaleidUV.y / shortRadius;
     // this identifies where it is in the triangle, not the image
@@ -210,6 +191,34 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
     }
 
     kaleidSampleData.uv = float2(sampleX, sampleY);
+
+    if (u_HexTriangleThickness > .0001f) {
+        float triangleTestRotationMatrix = createRotationMatrix(SIXTY_DEGREES / 2.f);
+        float thicknessCheck = u_HexTriangleThickness * .25f;
+
+        float2 relocatedUV = mul(kaleidUV, createRotationMatrix(SIXTY_DEGREES / 2.f));
+        float colorVal = smoothstep(thicknessCheck + AA, thicknessCheck - AA, abs(relocatedUV.x));
+        kaleidSampleData.color = lerp(kaleidSampleData.color, u_TriangleColor, colorVal);
+
+        relocatedUV = mul(kaleidUV, createRotationMatrix(-SIXTY_DEGREES / 2.f));
+        colorVal = smoothstep(thicknessCheck + AA, thicknessCheck - AA, abs(relocatedUV.x));
+        kaleidSampleData.color = lerp(kaleidSampleData.color, u_TriangleColor, colorVal);
+    }
+
+    if (u_HexBorderThickness > .0001f) {
+        float borderThickness = 1.f - u_HexBorderThickness * .5f;
+        float borderVal = smoothstep(borderThickness - AA, borderThickness + AA, kaleidSampleData.uv.y);
+        kaleidSampleData.color = lerp(kaleidSampleData.color, u_BorderColor, borderVal);
+    }   
+
+    if (u_HexCenterRadius > .0001f) {
+        float centerDist = distance(aspectUV, hexCenter);
+        float colorVal = smoothstep(u_HexCenterRadius * .5f + AA, 
+                                            u_HexCenterRadius * .5f - AA, centerDist);
+
+        kaleidSampleData.color = lerp(kaleidSampleData.color, u_HexCenterColor, colorVal);
+    }
+
     return kaleidSampleData;
 }
 
@@ -226,8 +235,12 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float timeScale = elapsed_time * .5f * u_TimeScaleModifier;
 
+    float4 borderColorAgg = float4(0.f, 0.f, 0.f, 0.f);
+    float borderColorVal = 0.f;
+
     for (int i=0; i<u_KaleidoscopeLevels; i++) {
-        kaleidSampleData.uv += float2(sin(timeScale), timeScale);
+        float noiseVal = hash(float2(float(i), 0.f));
+        kaleidSampleData.uv += float2(sin(timeScale + noiseVal), timeScale);
         kaleidSampleData = getKaleidoscopedUV(
             kaleidSampleData.uv, 
             aspectRatioData, 
@@ -237,14 +250,10 @@ float4 mainImage( VertData v_in ) : TARGET {
             hexGridXIncrement,
             hexGridYIncrement);
 
-        if (kaleidSampleData.colorReturned) {
-            return kaleidSampleData.color;
-        }
-
-        if (u_HexBorderThickness > .0001f && kaleidSampleData.uv.y > 1.f - u_HexBorderThickness * .5f) {
-            return u_BorderColor;
-        }     
+        borderColorAgg += kaleidSampleData.color;
     }
   
-    return image.Sample(textureSampler, kaleidSampleData.uv);
+    float4 outColor = lerp(image.Sample(textureSampler, kaleidSampleData.uv), borderColorAgg, borderColorAgg.a);
+    outColor.a = 1.f;
+    return outColor;
 }
