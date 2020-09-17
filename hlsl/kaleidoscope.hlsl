@@ -3,7 +3,7 @@
 #define MAIN_TRIANGLE_HEIGHT .5f
 #define TWOPI 6.28318530718f
 #define AA 0.001f
-#define SIXTY_DEGREES TWOPI/6.f
+#define SIXTY_DEGREES 1.0471975512f
 
 uniform float u_TimeScaleModifier = .1f;
 uniform float u_HexRadius = .8f;
@@ -172,9 +172,8 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
     
     float2x2 rotationMatrix = createRotationMatrix(rotation);
 
-    float2 unaspectedHexCenter = mul(hexCenter, aspectRatioData.inverseScaleMatrix);
     float2 kaleidUV = mul((aspectUV - hexCenter), rotationMatrix);
-    // kaleidUV should now be above 0,0, within the perfect triangle below 
+    // kaleidUV is below 0,0 (upper left) with the perfect triangle inverted below 
     // (y flipped in hlsl)
 
     float aspectRatio = aspectRatioData.aspectRatio;
@@ -190,7 +189,7 @@ KaleidSampleData getKaleidoscopedUV(float2 uv,
         sampleX = 1.f - sampleX;
     }
 
-    kaleidSampleData.uv = float2(sampleX, sampleY);
+    kaleidSampleData.uv = float2(clamp(sampleX, 0.f, 1.f), clamp(sampleY, 0.f, 1.f));
 
     if (u_HexTriangleThickness > .0001f) {
         float triangleTestRotationMatrix = createRotationMatrix(SIXTY_DEGREES / 2.f);
