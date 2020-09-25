@@ -48,11 +48,7 @@ AspectRatioMatrices getAspectRatioMatrices(float2 uvSize) {
     return aspectRatioMatrices;
 }
 
-struct SampleData {
-    float4 color;
-};
-
-SampleData getSampleData(float2 uv, AspectRatioMatrices aspectRatioMatrices, float sampleSize) {  
+float4 getSampleColor(float2 uv, AspectRatioMatrices aspectRatioMatrices, float sampleSize) {  
     float2 aspectUV = mul(uv, aspectRatioMatrices.scaleMatrix);
     float leftEdge = floor(aspectUV.x / sampleSize) * sampleSize;
     float rightEdge = leftEdge + sampleSize;
@@ -83,9 +79,7 @@ SampleData getSampleData(float2 uv, AspectRatioMatrices aspectRatioMatrices, flo
         }
     }
 
-    SampleData sampleData;
-    sampleData.color = outColor;
-    return sampleData;
+    return outColor;
 }
 
 // from https://www.shadertoy.com/view/4djSRW
@@ -161,11 +155,11 @@ float4 mainImage( VertData v_in ) : TARGET {
 
     float2 aspectUV = mul(uv, aspectRatioMatrices.scaleMatrix);
 
-    SampleData sampleData = getSampleData(uv, aspectRatioMatrices, SAMPLE_SIZE);
+    float4 sampleColor = getSampleColor(uv, aspectRatioMatrices, SAMPLE_SIZE);
 
-    float sampleBrightness = getBrightness(sampleData.color.rgb);
+    float sampleBrightness = getBrightness(sampleColor.rgb);
 
-    int hatchCount = getHatchCount(getBrightness(sampleData.color.rgb));
+    int hatchCount = getHatchCount(getBrightness(sampleColor.rgb));
 
     float4 outColor = u_ClearColor;
     float hatchAngleIncrement = u_HatchAngleIncrement * TWOPI;
